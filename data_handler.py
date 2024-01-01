@@ -24,7 +24,7 @@ class SyntheticDataset(Dataset):
             input_data = file.readlines() # Each line in input is a 2D array --> first dimension represents sequence length, second dimension represents embedding
             
         with open(output_data_path, 'r') as file:
-            output_data = file.readlines() # Each line in input is a 2D array for regression or a 2D array, 1D array for classification
+            output_data = file.readlines() # Each line in input is a 2D array for regression or a (2D array, 1D array) for classification
             
         return input_data, output_data
     
@@ -44,11 +44,6 @@ class SyntheticDataset(Dataset):
         input_seq = torch.as_tensor(input_seq, dtype=input_dtype)
         if self._mode == 'classification': decoder_input_seq = torch.as_tensor(decoder_input_seq, dtype=input_dtype)
         output_seq = torch.as_tensor(output_seq, dtype=output_dtype)
-        
-        # Adding a dummy start embedding (for regression) or index (for classification)
-        if len(output_seq.size()) == 1: output_seq = torch.cat((torch.tensor([0], dtype=output_seq.dtype), output_seq))
-        elif len(output_seq.size()) == 2: output_seq = torch.cat((torch.zeros((1, output_seq.size(-1)), dtype=output_seq.dtype), output_seq), dim=0)
-        if self._mode == 'classification': decoder_input_seq = torch.cat((torch.zeros((1, decoder_input_seq.size(-1)), dtype=decoder_input_seq.dtype), decoder_input_seq), dim=0)
         
         if self._mode == 'regression': return input_seq, output_seq # (seq_len_in, emb_dim), (seq_len_out, emb_dim)
         elif self._mode == 'classification': return input_seq, decoder_input_seq, output_seq
@@ -77,7 +72,10 @@ def _data_collater_fn(batch, mode, padding_value=-100, return_loss=True):
     if mode == 'regression': decoder_input_ids = padded_outputs[:, :-1, :] # (bsz, seq_len_out, emb_dim)
     elif mode == 'classification': decoder_input_ids = dec_inputs[:, :-1, :] # (bsz, seq_len_out, emb_dim)
     decoder_attention_mask = _get_attention_mask(decoder_input_ids, padding_value)
-    labels = padded_outputs[:, 1:] # (bsz, seq_len_out, emb_dim) for `regression` else (bsz, seq_len_out)
+    labels = padded_outputs[:, 0:] # (bsz, seq_len_out, emb_dim) for `regression` else (bsz, seq_len_out) | 0 because the decoder_input will be preprended with a start embedding
+    
+    if mode == 'regression': decoder_outputs = labels
+    elif mode == 'classification': decoder_outputs = dec_inputs[:, 1:, :]
     
     return {
         "encoder_input_ids": encoder_input_ids,
@@ -85,7 +83,8 @@ def _data_collater_fn(batch, mode, padding_value=-100, return_loss=True):
         "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
         "labels": labels,
-        "return_loss": return_loss
+        "return_loss": return_loss,
+        "decoder_outputs": decoder_outputs
     }
     
 def get_synthetic_data_loader(data_path, mode, input_fname, output_fname, padding_value, return_loss, batch_size, shuffle, num_workers, num_classes):
@@ -95,3 +94,14 @@ def get_synthetic_data_loader(data_path, mode, input_fname, output_fname, paddin
                             drop_last=False)
     
     return data_loader
+
+# # Test
+# from tqdm import trange
+# if __name__ == '__main__':
+#     data_path = 'synth-data/m2n1-fcbn-cbrt-d4/'
+#     data_loader = get_synthetic_data_loader(data_path, 'classification', 'valid_input.csv', 'valid_output.csv', -100, True, 4, True, 4, 5)
+    
+#     iterator = iter(data_loader)
+#     for step in trange(len(data_loader)):
+#         batch = next(iterator)
+#         if step in [1, 2]: print(batch)

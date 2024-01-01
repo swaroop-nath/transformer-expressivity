@@ -3,7 +3,7 @@ from sklearn.neighbors import KDTree
 from tqdm import trange
 import os
 
-def data_scheme_one(emb_dim, train_instances, test_instances, init_limits=(-1, 1)):
+def data_scheme_one(emb_dim, train_instances, val_instances, test_instances, init_limits=(-1, 1), classes=['10', '20']):
     '''
         Defines dataset according to the following Bayesian Net:
         
@@ -53,28 +53,22 @@ def data_scheme_one(emb_dim, train_instances, test_instances, init_limits=(-1, 1
             with open(dataset_path + f'classification/{key}/{type}_input.csv', 'w') as file:
                 file.write(input_train.strip())
         
-    dataset_path = f'./synth_data/m2n1-fcbn-d{emb_dim}/'
+    dataset_path = f'./synth-data/m2n1-fcbn-cbrt-d{emb_dim}/'
     train_data_instances = train_instances
     test_data_instances = test_instances
     
-    quantized_y1_centroids = {
-        '250': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=250),
-        '500': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=500),
-        '750': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=750),
-        '1000': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=1000),
-        '1250': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=1250),
-        '1500': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=1500),
-        '1750': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=1750),
-        '2000': np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=2000),
-    }
+    quantized_y1_centroids = {k: np.linspace(start=[init_limits[0]]*emb_dim, stop=[init_limits[1]]*emb_dim, num=eval(k)) for k in classes}
     
     centroid_kd_trees = {k: KDTree(v, leaf_size=1) for k, v in quantized_y1_centroids.items()}
     
     # Train
     generate_and_store(train_data_instances, centroid_kd_trees, dataset_path, type='train')
     
+    # Valid
+    generate_and_store(val_instances, centroid_kd_trees, dataset_path, type='valid')
+    
     #Test
     generate_and_store(test_data_instances, centroid_kd_trees, dataset_path, type='test')
     
 if __name__ == '__main__':
-    data_scheme_one(1, int(1e5), int(1e3))
+    data_scheme_one(8, int(1e5), int(1e4), int(1e4), classes=['5', '10', '15', '20'])

@@ -1,15 +1,27 @@
 from json import dumps
+##=========COMMON VARS=========##
+emb_dim = 4 # CHANGE THIS WITH RESPECT TO THE INPUT EMB-DIM | For ease, keep this powers of 2
+
 ##=========WANDB SWEEPING HPARAMS -- HPARAM TUNING=========##
+num_heads = [1]
+while True:
+    append_val = num_heads[-1] * 2
+    if append_val <= emb_dim: num_heads.append(append_val)
+    else: break
+    
 SWEEP_CONFIGURATION = {
-    "name": 'm2n1-fcbn-d1-pf1-regression',
+    "name": f'm2n1-fcbn-cbrt-d{emb_dim}-pf32-classification-c10',
     "method": 'bayes',
     "metric": {
-        "name": 'eval/failure_rate',
+        "name": 'eval/best_failure_rate',
         "goal": 'minimize'
     },
     "parameters": {
         "num-transformer-layers": {
             "values": [2, 4, 6],
+        },
+        "num-heads": {
+            "values": num_heads
         },
         "dropout": {
             "distribution": 'uniform',
@@ -17,15 +29,15 @@ SWEEP_CONFIGURATION = {
             "min": 0.1
         },
         "epoch": {
-            "values": [5, 10, 15],
+            "values": [3, 5, 7],
         },
         "grad-acc": {
             "values": [1, 2, 4, 8],    
         },
         "learning-rate": {
             "distribution": 'uniform',
-            "max": 8e-5,
-            "min": 7e-6
+            "max": 1e-2,
+            "min": 5e-6
         },
         "warmup-steps": {
             "values": [800, 1200, 1600]
@@ -35,16 +47,13 @@ SWEEP_CONFIGURATION = {
 
 class Configuration:
     def __init__(self):
-        ##=========COMMON VARS=========##
-        emb_dim = 1 # CHANGE THIS WITH RESPECT TO THE INPUT EMB-DIM
-
         ##=========MODEL SPECIFIC HPARAMS=========##
         self.TRANSFORMER_KWARGS = {
             'emb-dim': emb_dim,
-            'num-heads': 1,
+            'num-heads': -1,
             'num-encoder-layers': -1, # SET THIS USING SWEEP CONFIG
             'num-decoder-layers': -1, # SET THIS USING SWEEP CONFIG
-            'pffn-dim': 2,
+            'pffn-dim': 32, # CHANGE THIS FOR PFFN-DIM
             'dropout': -1, # SET THIS USING SWEEP CONFIG
             'activation': 'gelu',
             'pre-ln': False
@@ -52,10 +61,10 @@ class Configuration:
         self.RETURN_LOSS = True
 
         ##=========DATA SPECIFIC HPARAMS=========##
-        self.MODE = 'regression' # One of `regression` and `classification` # CHANGE THIS FOR MODE
-        self.DATA_PATH = f'./synth_data/m2n1-fcbn-d{emb_dim}' # CHANGE THIS FOR EXPERIMENT LOCATION
+        self.MODE = 'classification' # One of `regression` and `classification` # CHANGE THIS FOR MODE
+        self.DATA_PATH = f'./synth-data/m2n1-fcbn-cbrt-d{emb_dim}' # CHANGE THIS FOR EXPERIMENT LOCATION
         self.PADDING_VALUE = -100
-        self.NUM_CLASSES = 250 # CHANGE THIS FOR #CLASSES
+        self.NUM_CLASSES = 10 # CHANGE THIS FOR #CLASSES
         self.NUM_WORKERS = 4
 
         ##=========TRAINING SPECIFIC HPARAMS=========##
@@ -67,13 +76,15 @@ class Configuration:
         self.GRAD_ACC = -1 # SET THIS USING SWEEP CONFIG
         self.EPOCH = -1 # SET THIS USING SWEEP CONFIG
         self.WARMUP_STEPS = -1 # SET THIS USING SWEEP CONFIG
-        self.LOG_STEPS = 100
-        self.EVAL_STEPS = 1000
-        self.DEVICE = 'cuda:6'
+        self.LOG_STEPS = 50
+        self.EVAL_STEPS = 200
+        self.DEVICE = 'cuda:5'
+        self.MAX_GRAD_NORM = 1.0
 
     def set_configuration_hparams(self, config):
         self.TRANSFORMER_KWARGS['num-encoder-layers'] = config['num-transformer-layers']
         self.TRANSFORMER_KWARGS['num-decoder-layers'] = config['num-transformer-layers']
+        self.TRANSFORMER_KWARGS['num-heads'] = config['num-heads']
         self.TRANSFORMER_KWARGS['dropout'] = config['dropout']
         
         self.EPOCH = config['epoch']
