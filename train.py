@@ -270,13 +270,13 @@ def run_train(model, optimizer, scheduler, train_data_loader, val_data_loader, c
     wandb.log({'eval/best_failure_rate': best_failure_rate})
     return best_model_sd, best_eval_train_step, best_failure_rate
         
-def run_sweep(config=None):
+def run_sweep(config=None, sweep_config=None):
     with wandb.init(config=config) as run:
         config = wandb.config
         configuration = Configuration() 
         serialized_config_id = configuration.set_configuration_hparams(config)
         
-        run_dir = "./run-files/" + configuration.DATA_PATH.split('/')[-1] + "/" + configuration.MODE
+        run_dir = "./run-files/" + sweep_config['name'] + "/" + run.name
         if not os.path.exists(run_dir): os.makedirs(run_dir)
         with open(f'./{run_dir}/configuration.txt', 'w') as file:
             file.write(configuration.serialize())
@@ -309,4 +309,4 @@ if __name__ == '__main__':
     os.environ["WANDB_CONSOLE"] = "wrap"
     sweep_id = wandb.sweep(SWEEP_CONFIGURATION, project='transformer-continuous-experiments')
     
-    wandb.agent(sweep_id, run_sweep, count=15)
+    wandb.agent(sweep_id, lambda: run_sweep(sweep_config=SWEEP_CONFIGURATION), count=10)

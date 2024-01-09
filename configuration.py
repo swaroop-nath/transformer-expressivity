@@ -1,6 +1,15 @@
 from json import dumps
 ##=========COMMON VARS=========##
-emb_dim = 4 # CHANGE THIS WITH RESPECT TO THE INPUT EMB-DIM | For ease, keep this powers of 2
+emb_dim = 16 # CHANGE THIS WITH RESPECT TO THE INPUT EMB-DIM | For ease, keep this powers of 2
+num_classes = 20 # CHANGE THIS FOR #CLASSES
+pffn_dim = 32 # CHANGE THIS FOR PFFN-DIM
+m = 2 # CHANGE THIS FOR #inputs
+n = 1 # CHANGE THIS FOR #outputs
+device = 'cuda:2' # CHANGE THIS FOR DEVICE
+mode = 'classification' # One of `regression` and `classification` # CHANGE THIS FOR MODE
+
+sweep_name = f'm{m}n{n}-fcbn-cbrt-d{emb_dim}-pf{pffn_dim}-{mode}'
+if mode == 'classification': sweep_name += f'-c{num_classes}'
 
 ##=========WANDB SWEEPING HPARAMS -- HPARAM TUNING=========##
 num_heads = [1]
@@ -10,7 +19,7 @@ while True:
     else: break
     
 SWEEP_CONFIGURATION = {
-    "name": f'm2n1-fcbn-cbrt-d{emb_dim}-pf32-classification-c10',
+    "name": sweep_name,
     "method": 'bayes',
     "metric": {
         "name": 'eval/best_failure_rate',
@@ -29,7 +38,7 @@ SWEEP_CONFIGURATION = {
             "min": 0.1
         },
         "epoch": {
-            "values": [3, 5, 7],
+            "values": [4, 6, 9], # INCREASE THIS FOR HIGHER EMB-DIM/PFFN-DIM
         },
         "grad-acc": {
             "values": [1, 2, 4, 8],    
@@ -53,7 +62,7 @@ class Configuration:
             'num-heads': -1,
             'num-encoder-layers': -1, # SET THIS USING SWEEP CONFIG
             'num-decoder-layers': -1, # SET THIS USING SWEEP CONFIG
-            'pffn-dim': 32, # CHANGE THIS FOR PFFN-DIM
+            'pffn-dim': pffn_dim,
             'dropout': -1, # SET THIS USING SWEEP CONFIG
             'activation': 'gelu',
             'pre-ln': False
@@ -61,10 +70,10 @@ class Configuration:
         self.RETURN_LOSS = True
 
         ##=========DATA SPECIFIC HPARAMS=========##
-        self.MODE = 'classification' # One of `regression` and `classification` # CHANGE THIS FOR MODE
+        self.MODE = mode
         self.DATA_PATH = f'./synth-data/m2n1-fcbn-cbrt-d{emb_dim}' # CHANGE THIS FOR EXPERIMENT LOCATION
         self.PADDING_VALUE = -100
-        self.NUM_CLASSES = 10 # CHANGE THIS FOR #CLASSES
+        self.NUM_CLASSES = num_classes
         self.NUM_WORKERS = 4
 
         ##=========TRAINING SPECIFIC HPARAMS=========##
@@ -78,7 +87,7 @@ class Configuration:
         self.WARMUP_STEPS = -1 # SET THIS USING SWEEP CONFIG
         self.LOG_STEPS = 50
         self.EVAL_STEPS = 200
-        self.DEVICE = 'cuda:5'
+        self.DEVICE = device
         self.MAX_GRAD_NORM = 1.0
 
     def set_configuration_hparams(self, config):
