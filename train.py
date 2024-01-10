@@ -127,6 +127,9 @@ def run_on_test_set(model, test_data_loader, configuration, run_dir):
     preds = None
     true_vectors = None
     gen_vectors = None
+    enc_layers_sa_weights = None
+    dec_layers_sa_weights = None
+    dec_layers_xa_weights = None
     
     for step in range(len(test_data_loader)):
         batch = next(iterator)
@@ -154,7 +157,27 @@ def run_on_test_set(model, test_data_loader, configuration, run_dir):
         
         if gen_vectors is None: gen_vectors = decoder_outputs
         else: gen_vectors = torch.cat((gen_vectors, decoder_outputs), dim=0) # (bsz * steps, seq_len_out, emb_dim)
-   
+        
+        if configuration.LOG_ATTN_WEIGHTS:
+            # Logging Attention Weights
+            attention_weights = outputs['attention-weights']
+            batch_enc_layers_sa_weights = attention_weights['enc-sa-weights']
+            batch_dec_layers_sa_weights = attention_weights['dec-sa-weights']
+            batch_dec_layers_xa_weights = attention_weights['dec-xa-weights']
+            
+            if enc_layers_sa_weights is None: enc_layers_sa_weights = batch_enc_layers_sa_weights
+            else:
+                for key, attn_weights in batch_enc_layers_sa_weights.items():
+                    enc_layers_sa_weights[key] = torch.cat((enc_layers_sa_weights[key], attn_weights), dim=0) # concat along batch dimension
+            if dec_layers_sa_weights is None: dec_layers_sa_weights = batch_dec_layers_sa_weights
+            else:
+                for key, attn_weights in batch_dec_layers_sa_weights.items():
+                    dec_layers_sa_weights[key] = torch.cat((dec_layers_sa_weights[key], attn_weights), dim=0) # concat along batch dimension
+            if dec_layers_xa_weights is None: dec_layers_xa_weights = batch_dec_layers_xa_weights
+            else:
+                for key, attn_weights in batch_dec_layers_xa_weights.items():
+                    dec_layers_xa_weights[key] = torch.cat((dec_layers_xa_weights[key], attn_weights), dim=0) # concat along batch dimension
+        
     if not os.path.exists(f"./{run_dir}/eval-test-set"): os.makedirs(f"./{run_dir}/eval-test-set")
     with open(f"./{run_dir}/eval-test-set/labels.npy", "wb") as file:
         np.save(file, labels.cpu().numpy())
@@ -164,6 +187,22 @@ def run_on_test_set(model, test_data_loader, configuration, run_dir):
         np.save(file, gen_vectors.cpu().numpy())
     with open(f"./{run_dir}/eval-test-set/true-vectors.npy", "wb") as file:
         np.save(file, true_vectors.cpu().numpy())
+        
+    if configuration.LOG_ATTN_WEIGHTS:
+        for layer, attn_weights in enc_layers_sa_weights.items():
+            if not os.path.exists(f"./{run_dir}/eval-test-set/{layer}"): os.makedirs(f"./{run_dir}/eval-test-set/{layer}")
+            with open(f"./{run_dir}/eval-test-set/{layer}/enc-sa-weights.npy", "wb") as file:
+                np.save(file, attn_weights)
+                
+        for layer, attn_weights in dec_layers_sa_weights.items():
+            if not os.path.exists(f"./{run_dir}/eval-test-set/{layer}"): os.makedirs(f"./{run_dir}/eval-test-set/{layer}")
+            with open(f"./{run_dir}/eval-test-set/{layer}/dec-sa-weights.npy", "wb") as file:
+                np.save(file, attn_weights)
+                
+        for layer, attn_weights in dec_layers_xa_weights.items():
+            if not os.path.exists(f"./{run_dir}/eval-test-set/{layer}"): os.makedirs(f"./{run_dir}/eval-test-set/{layer}")
+            with open(f"./{run_dir}/eval-test-set/{layer}/dec-xa-weights.npy", "wb") as file:
+                np.save(file, attn_weights)
         
     compute_metrics(labels, preds, avg_loss, set='test')
 
@@ -258,6 +297,7 @@ def run_train(model, optimizer, scheduler, train_data_loader, val_data_loader, c
             if model_sd is not None: best_model_sd = model_sd
             model.train()
             optimizer.zero_grad(set_to_none=True)
+            break
             
         if (step + 1) % configuration.LOG_STEPS == 0:
             wandb.log({'train/loss': np.average(running_loss), 'train/learning_rate': scheduler.get_last_lr()[0]})
@@ -307,6 +347,6 @@ def run_sweep(config=None, sweep_config=None):
 if __name__ == '__main__':
     wandb.login()
     os.environ["WANDB_CONSOLE"] = "wrap"
-    sweep_id = wandb.sweep(SWEEP_CONFIGURATION, project='transformer-continuous-experiments')
+    sweep_id = wandb.sweep(SWEEP_CONFIGURATION, project='transformer-continuous-experiments-v2')
     
     wandb.agent(sweep_id, lambda: run_sweep(sweep_config=SWEEP_CONFIGURATION), count=10)

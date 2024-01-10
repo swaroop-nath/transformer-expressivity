@@ -1,9 +1,22 @@
 import torch
 import torch.nn as nn
 import math
+# from torch.nn import Transformer # Changed to our implementation of Transformer
+from transformer import Transformer
+
+class LearnedPositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_length=5000):
+        super().__init__()
+        self.dropout = dropout
+        pe = torch.empty(max_length, d_model)
+        nn.init.xavier_uniform_(pe, gain=nn.init.calculate_gain('relu'))
+        self.pe = nn.Parameter(pe, requires_grad=True).unsqueeze(dim=0) # (1, max_length, d_model)
+        
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1)].to(x.device) # (bsz, seq_len, d_model)
 
 # Code for Positional Encoding, based on Attention Is All You Need, from https://medium.com/@hunter-j-phillips/positional-encoding-7a93db4109e6
-class PositionalEncoding(nn.Module):
+class SinusoidalPositionalEncoding(nn.Module):
   def __init__(self, d_model, dropout=0.1, max_length=5000):
     """
     Args:
@@ -42,7 +55,7 @@ class TransformerCheck(nn.Module):
         super().__init__()
         self._emb_dim = transformer_kwargs['emb-dim']
         self._dec_start_token_emb = None
-        self._model = nn.Transformer(
+        self._model = Transformer(
                     d_model=transformer_kwargs['emb-dim'],
                     nhead=transformer_kwargs['num-heads'],
                     num_encoder_layers=transformer_kwargs['num-encoder-layers'],
@@ -53,7 +66,11 @@ class TransformerCheck(nn.Module):
                     batch_first=True,
                     norm_first=transformer_kwargs['pre-ln']).train()
         
-        self._pe = PositionalEncoding(transformer_kwargs['emb-dim'], dropout=transformer_kwargs['dropout'], max_length=10)
+        assert transformer_kwargs['pe-type'] in ['sinusoid', 'learned'], f"{transformer_kwargs['pe-type']} not supported"
+        if transformer_kwargs['pe-type'] == 'sinusoid':
+            self._pe = SinusoidalPositionalEncoding(transformer_kwargs['emb-dim'], dropout=transformer_kwargs['dropout'], max_length=10)
+        elif transformer_kwargs['pe-type'] == 'learned':
+            self._pe = LearnedPositionalEncoding(transformer_kwargs['emb-dim'], dropout=transformer_kwargs['dropout'], max_length=10)
         
         assert mode in ['classification', 'regression'], f"Specified mode {mode} not supported"
         
@@ -117,7 +134,7 @@ class TransformerCheck(nn.Module):
         encoder_input_ids = self._pe(encoder_input_ids)
         decoder_input_ids = self._pe(decoder_input_ids)
         
-        transformer_output = self._model(
+        transformer_output, attention_weights = self._model(
             src=encoder_input_ids,
             src_key_padding_mask=encoder_attention_mask,
             tgt=decoder_input_ids,
@@ -127,16 +144,16 @@ class TransformerCheck(nn.Module):
         if self._mode == 'regression' and return_loss:
             assert labels is not None, f"`labels` cannot be None if `return_loss` is set to `True`"
             loss = self._mse_loss(transformer_output, labels)
-            return {'loss': loss, 'output': transformer_output, 'vector-output': transformer_output}
+            return {'loss': loss, 'output': transformer_output, 'vector-output': transformer_output, 'attention-weights': attention_weights}
         elif self._mode == 'classification' and return_loss:
             assert labels is not None, f"`labels` cannot be None if `return_loss` is set to `True`"
             classification_output = self._ff(transformer_output)
             loss = self._ce_loss(classification_output, labels)
-            return {'loss': loss, 'output': classification_output, 'vector-output': transformer_output}
+            return {'loss': loss, 'output': classification_output, 'vector-output': transformer_output, 'attention-weights': attention_weights}
         
         if self._mode == 'regression' and not return_loss:
-            return {'output': transformer_output}
+            return {'output': transformer_output, 'attention-weights': attention_weights}
         elif self._mode == 'classification' and not return_loss:
             classification_output = self._ff(transformer_output)
-            return {'output': classification_output}
+            return {'output': classification_output, 'attention-weights': attention_weights}
             

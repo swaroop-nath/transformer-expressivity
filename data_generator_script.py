@@ -88,7 +88,7 @@ def data_scheme_mixed(emb_dim, train_instances, val_instances, test_instances, i
         The functions are (the values -1 and 1 are just place-holders):
         X1 ~ U(-1, 1)
         X2 = cbrt(X1) ε [-1, 1] --> Checks for poly function self-attention
-        X3 = 2 * log(2 + X1) + X1 / 10 ε [0, log(3)] --> Checks for logarithmic function self-attention
+        X3 = 2 * log(2 + X1) + X2 / 10 ε [0, log(3)] --> Checks for logarithmic function self-attention
         X4 = exp(X2) + X3 ε [0.3678, 2.7183] --> Checks for exponential function self-attention
         
         Y1 = (X1 + X2 + X3 + X4) / 5 ε [-0.3264, 1.0391] --> Checks for simple addition cross-attention

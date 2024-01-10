@@ -1,12 +1,14 @@
 from json import dumps
 ##=========COMMON VARS=========##
-emb_dim = 16 # CHANGE THIS WITH RESPECT TO THE INPUT EMB-DIM | For ease, keep this powers of 2
-num_classes = 20 # CHANGE THIS FOR #CLASSES
-pffn_dim = 32 # CHANGE THIS FOR PFFN-DIM
+emb_dim = 4 # CHANGE THIS WITH RESPECT TO THE INPUT EMB-DIM | For ease, keep this powers of 2
+num_classes = 5 # CHANGE THIS FOR #CLASSES
+pffn_dim = 8 # CHANGE THIS FOR PFFN-DIM
 m = 2 # CHANGE THIS FOR #inputs
 n = 1 # CHANGE THIS FOR #outputs
-device = 'cuda:2' # CHANGE THIS FOR DEVICE
-mode = 'classification' # One of `regression` and `classification` # CHANGE THIS FOR MODE
+device = 'cuda:6' # CHANGE THIS FOR DEVICE
+mode = 'regression' # One of `regression` and `classification` # CHANGE THIS FOR MODE
+pe_type = 'sinusoid' # One of `sinusoid` and `learned` # CHANGE THIS FOR POSITIONAL EMBEDDING EXPERIMENT
+log_attn = True
 
 sweep_name = f'm{m}n{n}-fcbn-cbrt-d{emb_dim}-pf{pffn_dim}-{mode}'
 if mode == 'classification': sweep_name += f'-c{num_classes}'
@@ -65,7 +67,8 @@ class Configuration:
             'pffn-dim': pffn_dim,
             'dropout': -1, # SET THIS USING SWEEP CONFIG
             'activation': 'gelu',
-            'pre-ln': False
+            'pre-ln': False,
+            'pe-type': pe_type
         }
         self.RETURN_LOSS = True
 
@@ -89,6 +92,7 @@ class Configuration:
         self.EVAL_STEPS = 200
         self.DEVICE = device
         self.MAX_GRAD_NORM = 1.0
+        self.LOG_ATTN_WEIGHTS = log_attn
 
     def set_configuration_hparams(self, config):
         self.TRANSFORMER_KWARGS['num-encoder-layers'] = config['num-transformer-layers']
